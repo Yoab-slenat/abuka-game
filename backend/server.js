@@ -44,7 +44,45 @@ async function initialize(){
 async function transaction(fn){const client=await pool.connect();try{await client.query('BEGIN');await client.query('SELECT pg_advisory_xact_lock(741852963)');const value=await fn(client);await client.query('COMMIT');return value;}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}}
 async function activeGame(db=pool){const r=await db.query('SELECT * FROM games WHERE active=TRUE LIMIT 1');if(!r.rowCount)throw new Error('No active game round.');return r.rows[0];}
 async function counts(db,gameId){const r=await db.query(`SELECT group_name,COUNT(*)::int AS total,COUNT(selected_number)::int AS selected FROM players WHERE game_id=$1 GROUP BY group_name`,[gameId]);const out={A:0,B:0,selected:0};for(const row of r.rows){out[row.group_name]=row.total;out.selected+=row.selected;}return out;}
-async function finishIfDue(){return transaction(async client=>{const game=await activeGame(client);if(game.state==='countdown'&&game.deadline&&new Date(game.deadline).getTime()<=Date.now()){await client.query("UPDATE games SET state='published',deadline=NULL WHERE id=$1 AND state='countdown'",[game.id]);return 'published';}return game.state;});}
+
+async function finishIfDue() {
+  return transaction(async client => {
+    const game = await activeGame(client);
+
+    const expired =
+      game.deadline &&
+      new Date(game.deadline).getTime() <= Date.now();
+
+    if (game.state === 'countdown' && expired) {
+      await client.query(
+        `UPDATE games
+         SET state = 'published',
+             deadline = NOW() + INTERVAL '5 minutes'
+         WHERE id = $1 AND state = 'countdown'`,
+        [game.id]
+      );
+
+      return 'published';
+    }
+
+    if (game.state === 'published' && expired) {
+      await client.query(
+        'DELETE FROM games WHERE id = $1',
+        [game.id]
+      );
+
+      await client.query(
+        `INSERT INTO games(state, active)
+         VALUES ('waiting', TRUE)`
+      );
+
+      return 'reset';
+    }
+
+    return game.state;
+  });
+}
+
 async function publicStatus(){await finishIfDue();const game=await activeGame();const c=await counts(pool,game.id);let secondsRemaining=0;if(game.state==='countdown'&&game.deadline)secondsRemaining=Math.max(0,Math.ceil((new Date(game.deadline).getTime()-Date.now())/1000));return {state:game.state,counts:{A:c.A,B:c.B},total:c.A+c.B,selected:c.selected,secondsRemaining};}
 function hashToken(token){return crypto.createHash('sha256').update(token).digest('hex');}
 async function requirePlayer(req,res,next){try{const token=(req.headers.authorization||'').replace(/^Bearer\s+/i,'');if(!token)return res.status(401).json({error:'Player login required.'});const r=await pool.query(`SELECT p.* FROM player_sessions s JOIN players p ON p.id=s.player_id JOIN games g ON g.id=p.game_id WHERE s.token_hash=$1 AND g.active=TRUE`,[hashToken(token)]);if(!r.rowCount)return res.status(401).json({error:'Player session is invalid or this round has been reset.'});req.player=r.rows[0];next();}catch(e){next(e);}}
