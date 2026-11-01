@@ -61,7 +61,72 @@ app.post('/api/register',async(req,res,next)=>{try{
  res.status(201).json({token,player:{id:created.id,playerId:created.player_id,fullName:created.full_name,telegramUsername:created.telegram_username,group:created.group_name}});
  }catch(e){if(e.code==='23505')return res.status(409).json({error:'That Player ID is already registered, or that number is already taken.'});next(e);}});
 app.post('/api/select',requirePlayer,async(req,res,next)=>{try{const number=Number(req.body.number);if(!Number.isInteger(number)||number<1||number>10)return res.status(400).json({error:'Choose a whole number from 1 to 10.'});const result=await transaction(async client=>{const game=await activeGame(client);if(game.state!=='waiting')throw Object.assign(new Error('Number selection is closed for this round.'),{status:409});const current=await client.query('SELECT * FROM players WHERE id=$1 AND game_id=$2 FOR UPDATE',[req.player.id,game.id]);if(!current.rowCount)throw Object.assign(new Error('Player not found in the active round.'),{status:404});if(current.rows[0].selected_number!==null)throw Object.assign(new Error('You have already submitted your number.'),{status:409});await client.query('UPDATE players SET selected_number=$1 WHERE id=$2',[number,req.player.id]);const c=await counts(client,game.id);if(c.A===5&&c.B===5&&c.selected===10)await client.query("UPDATE games SET state='countdown',deadline=NOW()+INTERVAL '10 seconds' WHERE id=$1",[game.id]);return c;});res.json({ok:true,counts:{A:result.A,B:result.B},selected:result.selected});}catch(e){if(e.code==='23505')return res.status(409).json({error:'That number is already selected in your group. Choose another number.'});next(e);}});
-app.get('/api/me',requirePlayer,async(req,res,next)=>{try{const status=await publicStatus();const p=await pool.query('SELECT id,player_id,full_name,telegram_username,group_name,selected_number FROM players WHERE id=$1',[req.player.id]);if(!p.rowCount)return res.status(404).json({error:'Player not found.'});const row=p.rows[0];let result=null;if(status.state==='published'){const opposite=row.group_name==='A'?'B':'A';const match=await pool.query(`SELECT full_name,telegram_username,group_name FROM players WHERE game_id=$1 AND group_name=$2 AND selected_number=$3 LIMIT 1`,[row.game_id,opposite,row.selected_number]);result={partner:match.rowCount?{fullName:match.rows[0].full_name,telegramUsername:match.rows[0].telegram_username,group:match.rows[0].group_name}:null};}res.json({player:{id:row.id,playerId:row.player_id,fullName:row.full_name,telegramUsername:row.telegram_username,group:row.group_name,hasSelected:row.selected_number!==null},status,result});}catch(e){next(e);}});
+
+app.get('/api/me', requirePlayer, async (req, res, next) => {
+  try {
+    const status = await publicStatus();
+
+    const p = await pool.query(
+      `SELECT id, game_id, player_id, full_name,
+              telegram_username, group_name, selected_number
+       FROM players
+       WHERE id = $1`,
+      [req.player.id]
+    );
+
+    if (!p.rowCount) {
+      return res.status(404).json({ error: 'Player not found.' });
+    }
+
+    const row = p.rows[0];
+    let result = null;
+
+    if (status.state === 'published') {
+      if (row.selected_number !== null) {
+        const opposite = row.group_name === 'A' ? 'B' : 'A';
+
+        const match = await pool.query(
+          `SELECT full_name, telegram_username, group_name
+           FROM players
+           WHERE game_id = $1
+             AND group_name = $2
+             AND selected_number = $3
+           LIMIT 1`,
+          [row.game_id, opposite, row.selected_number]
+        );
+
+        result = {
+          partner: match.rowCount
+            ? {
+                fullName: match.rows[0].full_name,
+                telegramUsername: match.rows[0].telegram_username,
+                group: match.rows[0].group_name
+              }
+            : null
+        };
+      } else {
+        result = { partner: null };
+      }
+    }
+
+    res.json({
+      player: {
+        id: row.id,
+        playerId: row.player_id,
+        fullName: row.full_name,
+        telegramUsername: row.telegram_username,
+        group: row.group_name,
+        hasSelected: row.selected_number !== null
+      },
+      status,
+      result
+    });
+
+  } catch (e) {
+    next(e);
+  }
+});
+
 app.post('/api/admin/login',adminLimiter,async(req,res)=>{const username=String(req.body.username||'');const password=String(req.body.password||'');if(username!==process.env.ADMIN_USERNAME||!await bcrypt.compare(password,process.env.ADMIN_PASSWORD_HASH))return res.status(401).json({error:'Invalid admin username or password.'});const token=jwt.sign({role:'admin'},process.env.JWT_SECRET,{expiresIn:'8h'});res.json({token});});
 app.get('/api/admin/dashboard',requireAdmin,async(req,res,next)=>{try{const status=await publicStatus();const game=await activeGame();const r=await pool.query('SELECT player_id,full_name,telegram_username,group_name,selected_number FROM players WHERE game_id=$1 ORDER BY group_name,created_at',[game.id]);res.json({status,players:r.rows.map(p=>({playerId:p.player_id,fullName:p.full_name,telegramUsername:p.telegram_username,group:p.group_name,number:p.selected_number}))});}catch(e){next(e);}});
 app.post('/api/admin/reset',requireAdmin,async(req,res,next)=>{try{await transaction(async client=>{const game=await activeGame(client);await client.query('DELETE FROM games WHERE id=$1',[game.id]);await client.query("INSERT INTO games(state,active) VALUES('waiting',TRUE)");});res.json({ok:true});}catch(e){next(e);}});
