@@ -230,18 +230,18 @@ app.use((err,req,res,next)=>{console.error(err);const status=err.status||500;res
     app.listen(PORT, () => {
       console.log(`Number Matching Game API listening on port ${PORT}`);
     });
-
     // Automatically check every 5 seconds.
-    setInterval(() => {
-      console.log('Checking automatic game reset...');
+setInterval(() => {
+  console.log('Checking automatic game reset...');
 
-      finishIfDue().catch(error => {
-        console.error('Automatic game reset failed:', error);
-      });
-    }, 5000);
-
-  } catch (e) {
+  finishIfDue().catch(error => {
+    console.error('Automatic game reset failed:', error);
+  });
+}, 5000);
+      } catch (e) {
     console.error('Backend startup failed:', e);
     process.exit(1);
   }
 })();
+
+  
