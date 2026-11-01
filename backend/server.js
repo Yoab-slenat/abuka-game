@@ -207,4 +207,30 @@ app.post('/api/admin/login',adminLimiter,async(req,res)=>{const username=String(
 app.get('/api/admin/dashboard',requireAdmin,async(req,res,next)=>{try{const status=await publicStatus();const game=await activeGame();const r=await pool.query('SELECT player_id,full_name,telegram_username,group_name,selected_number FROM players WHERE game_id=$1 ORDER BY group_name,created_at',[game.id]);res.json({status,players:r.rows.map(p=>({playerId:p.player_id,fullName:p.full_name,telegramUsername:p.telegram_username,group:p.group_name,number:p.selected_number}))});}catch(e){next(e);}});
 app.post('/api/admin/reset',requireAdmin,async(req,res,next)=>{try{await transaction(async client=>{const game=await activeGame(client);await client.query('DELETE FROM games WHERE id=$1',[game.id]);await client.query("INSERT INTO games(state,active) VALUES('waiting',TRUE)");});res.json({ok:true});}catch(e){next(e);}});
 app.use((err,req,res,next)=>{console.error(err);const status=err.status||500;res.status(status).json({error:status===500?'Server error. Check backend logs and database configuration.':err.message});});
-(async()=>{try{await initialize();app.listen(PORT,()=>console.log(`Number Matching Game API listening on port ${PORT}`));}catch(e){console.error('Backend startup failed:',e);process.exit(1);}})();
+
+(async () => {
+  try {
+    await initialize();
+
+    // Check for expired games when the server starts.
+    await finishIfDue();
+
+    app.listen(PORT, () => {
+      console.log(
+        `Number Matching Game API listening on port ${PORT}`
+      );
+    });
+
+    // Automatically check every 5 seconds.
+    setInterval(() => {
+      finishIfDue().catch(error => {
+        console.error('Automatic game reset failed:', error);
+      });
+    }, 5000).unref();
+
+  } catch (e) {
+    console.error('Backend startup failed:', e);
+    process.exit(1);
+  }
+})();
+
