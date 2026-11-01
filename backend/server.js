@@ -208,6 +208,7 @@ app.get('/api/admin/dashboard',requireAdmin,async(req,res,next)=>{try{const stat
 app.post('/api/admin/reset',requireAdmin,async(req,res,next)=>{try{await transaction(async client=>{const game=await activeGame(client);await client.query('DELETE FROM games WHERE id=$1',[game.id]);await client.query("INSERT INTO games(state,active) VALUES('waiting',TRUE)");});res.json({ok:true});}catch(e){next(e);}});
 app.use((err,req,res,next)=>{console.error(err);const status=err.status||500;res.status(status).json({error:status===500?'Server error. Check backend logs and database configuration.':err.message});});
 
+
 (async () => {
   try {
     await initialize();
@@ -222,26 +223,16 @@ app.use((err,req,res,next)=>{console.error(err);const status=err.status||500;res
     });
 
     // Automatically check every 5 seconds.
-  (async () => {
-  try {
-    await initialize();
-    await finishIfDue();
+    setInterval(() => {
+      console.log('Checking automatic game reset...');
 
-    app.listen(PORT, () => {
-      console.log(`Number Matching Game API listening on port ${PORT}`);
-    });
-    // Automatically check every 5 seconds.
-setInterval(() => {
-  console.log('Checking automatic game reset...');
+      finishIfDue().catch(error => {
+        console.error('Automatic game reset failed:', error);
+      });
+    }, 5000);
 
-  finishIfDue().catch(error => {
-    console.error('Automatic game reset failed:', error);
-  });
-}, 5000);
-      } catch (e) {
+  } catch (e) {
     console.error('Backend startup failed:', e);
     process.exit(1);
   }
 })();
-
-  
