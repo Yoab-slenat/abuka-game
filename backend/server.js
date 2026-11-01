@@ -21,26 +21,64 @@ app.use(express.json({limit:'20kb'}));
 app.use('/api',rateLimit({windowMs:60_000,limit:120,standardHeaders:'draft-7',legacyHeaders:false}));
 const adminLimiter=rateLimit({windowMs:15*60_000,limit:10,standardHeaders:'draft-7',legacyHeaders:false,message:{error:'Too many login attempts. Try again later.'}});
 
-async function initialize(){
- await pool.query(`CREATE TABLE IF NOT EXISTS games(
-   id BIGSERIAL PRIMARY KEY, state TEXT NOT NULL DEFAULT 'waiting' CHECK(state IN ('waiting','countdown','published')),
-   deadline TIMESTAMPTZ, active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
- )`);
- await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS one_active_game ON games(active) WHERE active=TRUE`);
- await pool.query(`CREATE TABLE IF NOT EXISTS players(
-   id BIGSERIAL PRIMARY KEY, game_id BIGINT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
-   player_id TEXT NOT NULL, full_name TEXT NOT NULL, telegram_username TEXT NOT NULL,
-   group_name CHAR(1) NOT NULL CHECK(group_name IN ('A','B')),
-   selected_number INTEGER CHECK(selected_number BETWEEN 1 AND 10), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-   UNIQUE(game_id,player_id)
- )`);
- await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS unique_group_number ON players(game_id,group_name,selected_number) WHERE selected_number IS NOT NULL`);
- await pool.query(`CREATE TABLE IF NOT EXISTS player_sessions(
-   token_hash TEXT PRIMARY KEY, player_id BIGINT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
- )`);
- await pool.query(`INSERT INTO games(state,active) SELECT 'waiting',TRUE WHERE NOT EXISTS(SELECT 1 FROM games WHERE active=TRUE)`);
+async function initialize() {
+  await pool.query(`CREATE TABLE IF NOT EXISTS games(
+    id BIGSERIAL PRIMARY KEY,
+    state TEXT NOT NULL DEFAULT 'waiting'
+      CHECK(state IN ('waiting','countdown','published')),
+    deadline TIMESTAMPTZ,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS one_active_game
+    ON games(active) WHERE active=TRUE
+  `);
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS players(
+    id BIGSERIAL PRIMARY KEY,
+    game_id BIGINT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+    player_id TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    telegram_username TEXT NOT NULL,
+    group_name CHAR(1) NOT NULL CHECK(group_name IN ('A','B')),
+    selected_number INTEGER CHECK(selected_number BETWEEN 1 AND 10),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(game_id,player_id)
+  )`);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS unique_group_number
+    ON players(game_id,group_name,selected_number)
+    WHERE selected_number IS NOT NULL
+  `);
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS player_sessions(
+    token_hash TEXT PRIMARY KEY,
+    player_id BIGINT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+
+  // Create an empty game if one does not exist.
+  await pool.query(`
+    INSERT INTO games(state,active)
+    SELECT 'waiting',TRUE
+    WHERE NOT EXISTS(
+      SELECT 1 FROM games WHERE active=TRUE
+    )
+  `);
+
+  // Give an older published game a five-minute deadline.
+  await pool.query(`
+    UPDATE games
+    SET deadline = NOW() + INTERVAL '5 minutes'
+    WHERE active = TRUE
+      AND state = 'published'
+      AND deadline IS NULL
+  `);
 }
+
 async function transaction(fn){const client=await pool.connect();try{await client.query('BEGIN');await client.query('SELECT pg_advisory_xact_lock(741852963)');const value=await fn(client);await client.query('COMMIT');return value;}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}}
 async function activeGame(db=pool){const r=await db.query('SELECT * FROM games WHERE active=TRUE LIMIT 1');if(!r.rowCount)throw new Error('No active game round.');return r.rows[0];}
 async function counts(db,gameId){const r=await db.query(`SELECT group_name,COUNT(*)::int AS total,COUNT(selected_number)::int AS selected FROM players WHERE game_id=$1 GROUP BY group_name`,[gameId]);const out={A:0,B:0,selected:0};for(const row of r.rows){out[row.group_name]=row.total;out.selected+=row.selected;}return out;}
