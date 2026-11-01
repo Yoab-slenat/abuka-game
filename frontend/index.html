@@ -25,7 +25,7 @@
         <label for="player-id">Player ID</label><input id="player-id" required minlength="2" maxlength="20" placeholder="Example: Player27">
         <label for="full-name">Full Name</label><input id="full-name" required maxlength="60" placeholder="Enter your full name">
         <label for="telegram">Telegram Username</label><input id="telegram" required maxlength="33" placeholder="Example: @player27"><p class="hint">Enter your Telegram username, with or without @.</p>
-        <label>Choose your group</label><div class="group-options"><label class="group-option"><input type="radio" name="group" value="A" checked><span><b>Group A</b><small>First group</small></span></label><label class="group-option"><input type="radio" name="group" value="B"><span><b>Group B</b><small>Second group</small></span></label></div>
+        <label>Choose your group</label><div class="group-options"><label class="group-option"><input type="radio" name="group" value="A" checked><span><b>Group A(Female)</b><small>First group</small></span></label><label class="group-option"><input type="radio" name="group" value="B"><span><b>Group B</b><small>Second group</small></span></label></div>
         <button class="btn primary wide" type="submit">Register Player</button>
       </form><p class="hint center">Maximum 5 players in each group. The game begins when all 10 players submit a number.</p>
     </div>
@@ -36,17 +36,17 @@
   </div></section>
 
   <section id="player" class="page dashboard">
-    <div class="page-heading"><div><span class="eyebrow">PLAYER AREA</span><h1>Welcome, <span id="welcome-name">Player</span></h1><p id="welcome-group">Group A</p></div><button class="btn outline" id="player-logout">Log out</button></div>
+    <div class="page-heading"><div><span class="eyebrow">PLAYER AREA</span><h1>Welcome, <span id="welcome-name">Player</span></h1><p id="welcome-group">Group A(Female)</p></div><button class="btn outline" id="player-logout">Log out</button></div>
     <div class="notice"><span>🔒</span><div><b>Opponent privacy is ON</b><p>Your number and other players’ choices stay hidden. Only your personal result is shown after the countdown.</p></div></div>
     <div class="dashboard-grid"><article class="card"><div class="panel-heading"><div><h2>Choose your number</h2><p>Choose one secret number from 1 to 10.</p></div><span class="pill" id="selection-state">Not submitted</span></div><div class="number-grid" id="number-grid"></div><button class="btn primary wide" id="confirm-number" disabled>Confirm my number</button><p class="hint" id="selection-note">Your number is private.</p></article>
-      <article class="card"><h2>Game progress</h2><p id="progress-text">Waiting for players to register.</p><div class="progress-track"><div id="progress-bar"></div></div><p class="hint">Group A and Group B each need 5 players.</p><div class="timer-box"><span>Game countdown</span><strong id="player-timer">Waiting</strong></div></article>
+      <article class="card"><h2>Game progress</h2><p id="progress-text">Waiting for players to register.</p><div class="progress-track"><div id="progress-bar"></div></div><p class="hint">Group A(Female) and Group B(Male) each need 5 players.</p><div class="timer-box"><span>Game countdown</span><strong id="player-timer">Waiting</strong></div></article>
     </div>
     <article class="card result-card" id="player-result" hidden></article>
   </section>
 
   <section id="admin" class="page dashboard">
     <div class="page-heading"><div><span class="eyebrow">ADMIN CONTROL PANEL</span><h1>Game Dashboard</h1><p>Monitor registration, selections, countdown and results.</p></div><button class="btn outline" id="admin-logout">Log out</button></div>
-    <div class="stats-grid"><div class="stat"><span>Total Players</span><strong id="admin-total">0/10</strong></div><div class="stat"><span>Group A</span><strong id="admin-a">0/5</strong></div><div class="stat"><span>Group B</span><strong id="admin-b">0/5</strong></div><div class="stat"><span>Game Status</span><strong class="stat-status" id="admin-status">Open</strong></div></div>
+    <div class="stats-grid"><div class="stat"><span>Total Players</span><strong id="admin-total">0/10</strong></div><div class="stat"><span>Group A(Female)</span><strong id="admin-a">0/5</strong></div><div class="stat"><span>Group B(Male) </span><strong id="admin-b">0/5</strong></div><div class="stat"><span>Game Status</span><strong class="stat-status" id="admin-status">Open</strong></div></div>
     <article class="card"><div class="panel-heading"><div><h2>Registered Players</h2><p>Secret numbers are visible to administrators only.</p></div><button class="btn outline small" id="admin-refresh">Refresh</button></div><div class="table-wrap"><table><thead><tr><th>Full name</th><th>Player ID</th><th>Telegram</th><th>Group</th><th>Number</th><th>Status</th></tr></thead><tbody id="admin-rows"><tr><td colspan="6">No players yet.</td></tr></tbody></table></div></article>
     <article class="card admin-controls"><h2>Game Controls</h2><p>The game starts automatically when all 10 players have submitted their numbers.</p><button class="btn danger" id="reset-game">Reset game / start new round</button><p class="hint">Resetting permanently clears this round’s player registrations and selections.</p></article>
   </section>
